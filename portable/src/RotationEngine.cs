@@ -7,10 +7,11 @@ namespace TrackballCAD.Portable
         public int UpdateHz { get; set; }
         public string ActivationKey { get; set; }
         public string ActivationMode { get; set; }
+        public bool ReturnCursorOnStop { get; set; }
         public double RadiansPerCount { get; set; }
         public bool InvertX { get; set; }
         public bool InvertY { get; set; }
-        public RotationSettings() { ActivationMode = "Hold"; UpdateHz = 30; ActivationKey = "LeftShift"; RadiansPerCount = 0.002; }
+        public RotationSettings() { ReturnCursorOnStop = true; ActivationMode = "Hold"; UpdateHz = 30; ActivationKey = "LeftShift"; RadiansPerCount = 0.002; }
         public void Validate()
         {
             if (ActivationMode != "Hold" && ActivationMode != "Toggle") throw new ArgumentException("Use Hold or Toggle.");
@@ -55,6 +56,13 @@ namespace TrackballCAD.Portable
         public void Reset()
         {
             lock (sync) { x = y = 0; active = false; requireRelease = true; gesture++; }
+        }
+        // A slow successful COM call is not a stop request. Clear accumulated and
+        // still-queued input through this timestamp without changing activation/gesture.
+        // Keeping the gesture also avoids repeating the costly CAD context setup.
+        public void DiscardPendingThrough(int now)
+        {
+            lock (sync) { x = y = 0; began = unchecked(now + 1); }
         }
         public bool UpdateGate(bool allowed, bool keyDown, int now)
         {

@@ -93,6 +93,63 @@ Assert-Result ([TrackballCAD.Portable.RotationEngine]::IsFresh(2147483640, -2147
 $engine.Select(12)
 Assert-Result (!$engine.Active -and !$engine.Consume(507).HasMotion) 'Device selection cancels gesture and motion'
 
+# Toggle supplies a latched true gate, independent of the physical shortcut keys.
+# Simulate COM pumping raw packets during a slow first update, then returning.
+[void]$engine.UpdateGate($true, $false, 600)
+[void]$engine.UpdateGate($true, $true, 601)
+$gestureBeforeSlowCall = $engine.Gesture
+$engine.Add((New-RawPacket 12 10 20 650), 650)
+$engine.DiscardPendingThrough(900)
+Assert-Result ($engine.Active -and $engine.Gesture -eq $gestureBeforeSlowCall) 'Slow update preserves activation and cached CAD gesture'
+Assert-Result (!$engine.Consume(900).HasMotion) 'Slow update discards motion accumulated during COM'
+$engine.Add((New-RawPacket 12 10 20 899), 901)
+$engine.Add((New-RawPacket 12 10 20 900), 901)
+Assert-Result (!$engine.Consume(901).HasMotion) 'Packets queued before or at slow-call completion are discarded even if fresh'
+Assert-Result ($engine.UpdateGate($true, $true, 902)) 'Latched Toggle remains active after delayed update'
+$engine.Add((New-RawPacket 12 10 20 902), 902)
+Assert-Result ($engine.Consume(903).HasMotion) 'Fresh movement after slow update rotates without another hotkey'
+[void]$engine.UpdateGate($false, $true, 904)
+$engine.DiscardPendingThrough(905)
+Assert-Result (!$engine.Active -and !$engine.UpdateGate($true, $true, 906)) 'Backlog discard cannot undo a focus-loss stop'
+$engine.Reset()
+$engine.DiscardPendingThrough(907)
+Assert-Result (!$engine.Active) 'Backlog discard cannot undo an explicit stop'
+[void]$engine.UpdateGate($true, $false, 2147483645)
+[void]$engine.UpdateGate($true, $true, 2147483646)
+$engine.DiscardPendingThrough(2147483647)
+$engine.Add((New-RawPacket 12 10 20 2147483647), -2147483647)
+Assert-Result (!$engine.Consume(-2147483647).HasMotion) 'Discard boundary handles tick-count wrap'
+$engine.Add((New-RawPacket 12 10 20 -2147483648), -2147483647)
+Assert-Result ($engine.Consume(-2147483647).HasMotion) 'Fresh post-wrap movement is accepted'
+
+# Cursor return is pure state here: tests never read or move the real cursor.
+$cursor = New-Object TrackballCAD.Portable.CursorReturnState
+$origin = New-Object TrackballCAD.Portable.CursorPoint
+$origin.X = -1200; $origin.Y = 250
+$destination = New-Object TrackballCAD.Portable.CursorPoint
+$cursor.Begin($origin)
+Assert-Result (!$cursor.TryTake($true, 10, [ref]$destination)) 'No cursor move during active rotation'
+$cursor.End($true, 20)
+$cursor.End($true, 30)
+Assert-Result ($cursor.TryTake($true, 31, [ref]$destination) -and $destination.X -eq -1200 -and $destination.Y -eq 250) 'Explicit stop returns saved screen coordinates including negative X'
+Assert-Result (!$cursor.TryTake($true, 32, [ref]$destination)) 'Return is consumed once even after repeated stop requests'
+$cursor.Begin($origin); $cursor.End($true, 40)
+Assert-Result (!$cursor.TryTake($false, 41, [ref]$destination)) 'Focus loss discards cursor return'
+Assert-Result (!$cursor.TryTake($true, 42, [ref]$destination)) 'Focus regain cannot replay cursor return'
+$cursor.Begin($origin); $cursor.End($false, 50)
+Assert-Result (!$cursor.TryTake($true, 51, [ref]$destination)) 'Error or automatic stop cancels cursor return'
+$cursor.Begin($origin); $cursor.End($true, 60); $cursor.Cancel()
+Assert-Result (!$cursor.TryTake($true, 61, [ref]$destination)) 'Settings change or shutdown discards pending return'
+$cursor.Begin($origin); $cursor.End($true, 70); $cursor.End($true, 1000)
+Assert-Result (!$cursor.TryTake($true, 1071, [ref]$destination)) 'Delayed return expires and repeated Escape cannot extend its deadline'
+$cursor.Begin($origin); $cursor.End($true, 2147483640)
+Assert-Result ($cursor.TryTake($true, -2147483640, [ref]$destination)) 'Cursor return deadline handles tick-count wrap'
+$cursor.Begin($origin); $cursor.End($true, 80)
+$origin.X = 400; $cursor.Begin($origin)
+Assert-Result (!$cursor.TryTake($true, 81, [ref]$destination)) 'New gesture cancels an older pending return'
+$cursor.End($true, 82)
+Assert-Result ($cursor.TryTake($true, 83, [ref]$destination) -and $destination.X -eq 400) 'New gesture saves a new origin'
+
 $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) ('TrackballCAD-test-' + [Guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($temporaryDirectory)
 try {
@@ -107,13 +164,20 @@ try {
     $settings = Read-RotationSettings -Configuration $restored
     $settings.UpdateHz = 45
     $settings.ActivationMode = 'Toggle'
+    $settings.ReturnCursorOnStop = $false
     Save-RotationSettings -Path $path -Configuration $restored -Settings $settings -Device $device
     $roundTrip = Read-PortableConfiguration -Path $path
     Assert-Result ((Read-RotationSettings -Configuration $roundTrip).UpdateHz -eq 45) 'Rotation settings JSON round trip'
     Assert-Result ((Read-RotationSettings -Configuration $roundTrip).ActivationMode -eq 'Toggle') 'Toggle activation survives JSON round trip'
+    Assert-Result (!(Read-RotationSettings -Configuration $roundTrip).ReturnCursorOnStop) 'Disabled cursor return survives JSON round trip'
+    $roundTrip.rotation.returnCursorOnStop = 'true'
+    $rejected = $false
+    try { Read-RotationSettings -Configuration $roundTrip | Out-Null } catch { $rejected = $true }
+    Assert-Result $rejected 'Cursor return rejects a JSON string instead of boolean'
     $legacy = '{"schemaVersion":1,"diagnosticsRefreshMs":100,"selectedDevice":null}' | ConvertFrom-Json
     Assert-Result ((Read-RotationSettings -Configuration $legacy).ActivationKey -eq 'LeftShift') 'Older diagnostic config uses safe rotation defaults'
     Assert-Result ((Read-RotationSettings -Configuration $legacy).ActivationMode -eq 'Hold') 'Legacy activation remains Hold'
+    Assert-Result ((Read-RotationSettings -Configuration $legacy).ReturnCursorOnStop) 'Cursor return defaults on in older configurations'
     $settings.ActivationMode = 'Unknown'
     $rejected = $false
     try { $settings.Validate() } catch { $rejected = $true }

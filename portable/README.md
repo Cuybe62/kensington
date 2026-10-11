@@ -237,7 +237,9 @@ est échantillonnée; elle n'est pas une reconstruction exacte de l'ordre matér
 La perte de premier plan ou un dialogue empêchant l'accès à la fenêtre principale annule le
 geste et exige un relâchement puis une nouvelle pression dans SolidWorks. Un changement de
 périphériques enlève la sélection et désactive la navigation. Un changement de document/vue,
-une erreur COM ou une mise à jour dépassant 150 ms désactive la navigation sans retry automatique.
+ou une erreur COM désactive la navigation sans retry automatique. Une mise à jour dépassant
+150 ms jette les mouvements accumulés et ceux encore en file à son retour, sans désactiver
+la navigation : seul un nouveau mouvement peut produire une rotation après ce délai.
 Revenir à un état prêt puis réactiver, ou reconnecter si SolidWorks a été fermé. Les états internes
 non modaux de SolidWorks ne sont pas tous détectables par le test de fenêtre : terminer les
 commandes avant l'essai. Échap ne peut pas interrompre immédiatement un appel COM bloqué.
@@ -263,7 +265,8 @@ pas encore l'indépendance complète de la navigation et du curseur.
 
 `RIDEV_NOLEGACY` n'est pas un mécanisme de suppression globale des mouvements d'une Kensington
 précise dans un autre processus. Il n'est pas utilisé. Aucun hook de suppression, `ClipCursor`,
-`SetCursorPos`, émulation de clics ou pilote n'est inclus.
+émulation de clics ou pilote n'est inclus. Un appel ponctuel à `SetCursorPos` peut désormais
+ramener le curseur à la fin du geste, si l'option **Return cursor on stop** est cochée.
 
 Les compromis envisageables pour une future étape sont :
 
@@ -409,7 +412,8 @@ pas interrompre un appel COM déjà bloqué. Le mode Hold reste utilisable comme
 Ne pas leur attribuer des commandes CAD supplémentaires dans ce prototype : elles
 s'ajouteraient aux clics natifs. Les raccourcis clavier évitent de devoir cliquer avec
 la Kensington pour activer la navigation ; ils ne suppriment pas ses clics. Aucun blocage
-global des souris, repositionnement du curseur ou pilote n'est ajouté. L'indépendance
+global des souris, repositionnement permanent du curseur ou pilote n'est ajouté.
+La version cursor-return-1 ajoute uniquement un retour ponctuel en fin de geste. L'indépendance
 complète demandée n'est donc toujours pas satisfaite.
 
 Validation de cette évolution : contrôles statiques locaux uniquement. La compilation
@@ -418,3 +422,88 @@ la rotation doivent être testés sur Windows. Les tests PowerShell couvrent aus
 persistance du mode, les anciens fichiers et le rejet d'un mode inconnu.
 
 Référence : [RegisterHotKey et MOD_NOREPEAT](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey).
+
+
+## Correctif toggle-fix-2 : petite rotation puis arrêt
+
+Le maintien de Maj fonctionne d'après le retour utilisateur, mais la première version
+Toggle ne produisait qu'un petit déplacement sur son poste. L'utilisateur a confirmé que
+l'arrêt venait du seuil de 150 ms. Le code désactivait entièrement la navigation dès qu'une
+mise à jour COM dépassait ce seuil, y compris la préparation initiale du document et de la vue.
+
+Cette version conserve l'activation après un appel lent terminé sans exception. Elle
+supprime tous les deltas accumulés pendant cet appel et rejette les paquets encore en file
+dont l'horodatage précède ou égale son retour. Les mouvements suivants sont traités normalement,
+sans rejouer l'ancienne commande ni réinitialiser le contexte CAD. Une erreur COM continue
+d'arrêter la navigation ; ni le contrôle de premier plan ni les arrêts explicites ne sont retirés.
+
+Pour tester :
+
+1. Fermer l'ancienne fenêtre et ouvrir un **nouveau processus PowerShell** avec
+   `powershell.exe -NoProfile -STA -File .\Start-Navigation.ps1` depuis le dossier extrait.
+2. Vérifier le titre de version (**toggle-fix-2**, ou **cursor-return-1** qui inclut ce correctif), sélectionner la Kensington,
+   connecter SolidWorks et choisir Toggle.
+3. Dans SolidWorks, presser Ctrl+Maj+F9 une fois, relâcher toutes les touches,
+   puis faire rouler la boule pendant quelques secondes.
+4. Vérifier que la rotation continue après un premier appel lent, sans toucher le clavier.
+   Presser de nouveau le raccourci pour arrêter ; vérifier aussi Échap et le changement de fenêtre.
+5. Si le problème persiste, revenir dans TrackballCAD et cliquer **Copy diagnostics**.
+   Le journal conserve l'arrêt précédent même si le retour à la fenêtre cause ensuite une
+   perte de focus. Il indique la réception du raccourci, les arrêts et les appels lents.
+   Le même rapport est écrit dans la console à la fermeture, sans fichier automatique.
+
+Les tests `tests/Test-Portable.ps1` ajoutent les cas de maintien de l'activation après appel
+lent, de rejet de la file ancienne, de mouvement suivant accepté, de perte de focus et
+arrêt explicite non annulés par le vidage, ainsi que le bouclage du compteur de temps.
+Ces tests nécessitent Windows PowerShell 5.1 ; ils n'ont pas été exécutés dans l'environnement
+Linux de création. Contrôles locaux : diff, intégrité JSON, références des sources et archive.
+
+
+## Retour ponctuel du curseur — cursor-return-1
+
+À la demande de l'utilisateur, **Return cursor on stop** est activé par défaut. L'objectif
+est d'alterner trackball et souris : la position est lue à l'activation réelle du geste,
+le curseur reste libre pendant la rotation, puis revient une seule fois au point mémorisé
+lors de l'arrêt au clavier. Ce n'est ni un blocage ni une séparation des curseurs.
+
+1. Fermer l'ancienne version et lancer un nouveau processus depuis cette archive :
+   `powershell.exe -NoProfile -STA -File .\Start-Navigation.ps1`.
+2. Vérifier le titre **cursor-return-1**, sélectionner la trackball et connecter SolidWorks.
+   Choisir **Toggle** et laisser **Return cursor on stop** coché.
+3. Dans SolidWorks, placer le curseur à un endroit reconnaissable, puis presser Ctrl+Maj+F9.
+4. Relâcher les touches, orienter la vue avec la boule et arrêter de bouger la boule.
+5. Presser de nouveau Ctrl+Maj+F9, ou Échap : le curseur revient à sa position de départ.
+   Reprendre ensuite la souris normale. Si la boule bouge encore après ce retour, ses
+   mouvements natifs déplaceront à nouveau le curseur.
+
+En mode Hold, le relâchement du modificateur demande aussi ce retour. L'option est enregistrée
+avec **Save settings on close** dans `rotation.returnCursorOnStop` (booléen JSON). Les anciens
+fichiers sans cette propriété activent ce nouveau comportement ; décocher pour le désactiver.
+
+La perte de focus, un dialogue modal détecté, une erreur, un changement de périphérique,
+une modification des réglages ou la fermeture annulent le retour. Cliquer STOP dans la fenêtre
+TrackballCAD change le focus et ne ramène donc pas le curseur. Utiliser le raccourci ou Échap
+**dans SolidWorks** pour demander le retour. Une demande retardée de plus d'une seconde par
+un blocage COM est abandonnée, sans nouvelle tentative, pour éviter un saut tardif.
+
+Le module `src/CursorReturn.cs` contient l'état de ce retour et les déclarations Win32.
+La capture lit la position à la transition vers Rotate ; elle ne la modifie jamais.
+Le timer STA consomme la demande une seule fois après l'arrêt et vérifie encore le premier
+plan avant d'appeler SetCursorPos. Le journal indique la capture, le retour ou son échec.
+Aucun appel de repositionnement n'est exécuté continuellement pendant la navigation.
+
+**Limites :** les clics restent actifs et le curseur peut sortir de la zone du modèle pendant
+la rotation. Ne pas utiliser la souris normale simultanément si son déplacement doit être
+conservé : le retour remet le point initial des deux périphériques. Les restrictions de bureau
+ou un confinement du curseur imposé par une autre application peuvent empêcher le retour exact ;
+aucun changement de droits, de bureau ou de confinement n'est tenté.
+
+Validation locale : contrôles statiques et archive. Les tests PowerShell ajoutés vérifient
+le retour unique, les coordonnées négatives, l'annulation, l'expiration et la configuration,
+sans déplacer le vrai curseur. Ils restent à exécuter sur Windows avec
+`powershell.exe -NoProfile -STA -File .\tests\Test-Portable.ps1`.
+Valider manuellement le retour avec Ctrl+Maj+F9 et Échap, son absence après Alt+Tab, l'option
+décochée et, si applicable, plusieurs écrans avec des facteurs d'échelle différents.
+
+Références Microsoft : [GetCursorPos](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getcursorpos),
+[SetCursorPos](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setcursorpos).

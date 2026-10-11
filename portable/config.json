@@ -8,6 +8,7 @@
     "radiansPerCount": 0.002,
     "invertX": false,
     "invertY": false,
-    "activationMode": "Toggle"
+    "activationMode": "Toggle",
+    "returnCursorOnStop": true
   }
 }

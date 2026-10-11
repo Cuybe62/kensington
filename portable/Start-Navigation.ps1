@@ -13,8 +13,10 @@ try {
     [Windows.Forms.Application]::EnableVisualStyles()
     $window = New-Object TrackballCAD.Portable.NavigationWindow -ArgumentList $settings, $savedPath
     Write-Host 'Rotation is initially disabled. Select the trackball, connect, then Enable rotation.'
+    Write-Host 'Return cursor on stop restores once on keyboard stop in SolidWorks; focus loss cancels it.'
     Write-Host 'Windows cursor and native clicks remain shared. Escape stops navigation while the UI responds.'
     [Windows.Forms.Application]::Run($window)
+    Write-Host $window.DiagnosticReport
     if ($window.LastError) { Write-Host "Last navigation error: $($window.LastError)" }
     if ($window.SaveRequested) {
         Save-RotationSettings -Path $ConfigPath -Configuration $configuration -Settings $window.Settings -Device $window.SelectedDevice

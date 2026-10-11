@@ -18,7 +18,7 @@ function Import-PortableBridge {
     Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
     Add-Type -AssemblyName System.Drawing -ErrorAction Stop
     $sourceRoot = Join-Path $PSScriptRoot '../src'
-    $sources = @('RawInputBridge.cs', 'DiagnosticsWindow.cs', 'RotationEngine.cs', 'SolidWorksRotationAdapter.cs', 'NavigationWindow.cs') |
+    $sources = @('RawInputBridge.cs', 'DiagnosticsWindow.cs', 'RotationEngine.cs', 'CursorReturn.cs', 'SolidWorksRotationAdapter.cs', 'NavigationWindow.cs') |
         ForEach-Object { Join-Path $sourceRoot $_ }
     Add-Type -Path $sources -ReferencedAssemblies System.dll,System.Core.dll,System.Windows.Forms.dll,System.Drawing.dll -ErrorAction Stop
 }
