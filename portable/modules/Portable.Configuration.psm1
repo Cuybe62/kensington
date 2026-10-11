@@ -52,6 +52,10 @@ function Read-RotationSettings {
         if ($rotation.invertX -isnot [bool] -or $rotation.invertY -isnot [bool]) { throw 'rotation.invertX and invertY must be JSON booleans.' }
         $settings.UpdateHz = $rotation.updateHz
         $settings.ActivationKey = $rotation.activationKey
+        if ($null -ne $rotation.PSObject.Properties['activationMode']) {
+            if ($rotation.activationMode -isnot [string]) { throw 'rotation.activationMode must be a string.' }
+            $settings.ActivationMode = $rotation.activationMode
+        }
         $settings.RadiansPerCount = $rotation.radiansPerCount
         $settings.InvertX = $rotation.invertX
         $settings.InvertY = $rotation.invertY
@@ -65,6 +69,7 @@ function Save-RotationSettings {
         [Parameter(Mandatory = $true)]$Settings, $Device)
     $Settings.Validate()
     $rotation = [pscustomobject]@{
+        activationMode = $Settings.ActivationMode
         updateHz = $Settings.UpdateHz; activationKey = $Settings.ActivationKey
         radiansPerCount = $Settings.RadiansPerCount; invertX = $Settings.InvertX; invertY = $Settings.InvertY
     }

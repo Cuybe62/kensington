@@ -6,12 +6,14 @@ namespace TrackballCAD.Portable
     {
         public int UpdateHz { get; set; }
         public string ActivationKey { get; set; }
+        public string ActivationMode { get; set; }
         public double RadiansPerCount { get; set; }
         public bool InvertX { get; set; }
         public bool InvertY { get; set; }
-        public RotationSettings() { UpdateHz = 30; ActivationKey = "LeftShift"; RadiansPerCount = 0.002; }
+        public RotationSettings() { ActivationMode = "Hold"; UpdateHz = 30; ActivationKey = "LeftShift"; RadiansPerCount = 0.002; }
         public void Validate()
         {
+            if (ActivationMode != "Hold" && ActivationMode != "Toggle") throw new ArgumentException("Use Hold or Toggle.");
             if (UpdateHz < 30 || UpdateHz > 60) throw new ArgumentOutOfRangeException("UpdateHz", "Use 30 to 60 Hz.");
             if (double.IsNaN(RadiansPerCount) || double.IsInfinity(RadiansPerCount) || RadiansPerCount < 0.0001 || RadiansPerCount > 0.02)
                 throw new ArgumentOutOfRangeException("RadiansPerCount", "Use 0.0001 to 0.02 rad/count.");

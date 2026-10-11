@@ -106,11 +106,18 @@ try {
     Assert-Result ($restored.selectedDevice.path -eq $device.Path) 'Device path JSON round trip'
     $settings = Read-RotationSettings -Configuration $restored
     $settings.UpdateHz = 45
+    $settings.ActivationMode = 'Toggle'
     Save-RotationSettings -Path $path -Configuration $restored -Settings $settings -Device $device
     $roundTrip = Read-PortableConfiguration -Path $path
     Assert-Result ((Read-RotationSettings -Configuration $roundTrip).UpdateHz -eq 45) 'Rotation settings JSON round trip'
+    Assert-Result ((Read-RotationSettings -Configuration $roundTrip).ActivationMode -eq 'Toggle') 'Toggle activation survives JSON round trip'
     $legacy = '{"schemaVersion":1,"diagnosticsRefreshMs":100,"selectedDevice":null}' | ConvertFrom-Json
     Assert-Result ((Read-RotationSettings -Configuration $legacy).ActivationKey -eq 'LeftShift') 'Older diagnostic config uses safe rotation defaults'
+    Assert-Result ((Read-RotationSettings -Configuration $legacy).ActivationMode -eq 'Hold') 'Legacy activation remains Hold'
+    $settings.ActivationMode = 'Unknown'
+    $rejected = $false
+    try { $settings.Validate() } catch { $rejected = $true }
+    Assert-Result $rejected 'Unknown activation mode rejected'
     $bad = '{"schemaVersion":1,"diagnosticsRefreshMs":0,"selectedDevice":null}'
     Set-Content -LiteralPath $path -Value $bad -Encoding UTF8
     $rejected = $false

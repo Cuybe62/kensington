@@ -6,7 +6,7 @@ autonome : copier son contenu dans un dossier autorisé sur le poste de l'école
 
 **Le diagnostic COM et le test de rotation de 5° ont été validés par l'utilisateur sur
 la révision 33.5.0, avec un assemblage.** Cette livraison ajoute la liaison continue
-trackball → rotation, à tester sur le poste. Le déplacement et le zoom restent reportés.
+trackball → rotation, confirmée par retour utilisateur en mode maintien de Maj. Le déplacement et le zoom restent reportés.
 `Check-Environment.ps1` et `Start-TrackballCAD.ps1` restent des outils sans commande de vue;
 seuls le test explicite et le nouveau `Start-Navigation.ps1` peuvent orienter la vue.
 
@@ -310,7 +310,7 @@ Une inscription Raw Input préexistante dans le processus est refusée plutôt q
 État des prochaines étapes :
 
 3. Test explicite de petite rotation **validé par retour utilisateur** sur 33.5.0.
-4. Liaison boule → rotation fournie, validation continue **en attente**, cible 30 Hz réglable
+4. Liaison boule → rotation **confirmée par retour utilisateur**, cible 30 Hz réglable
    jusqu'à 60 Hz; sensibilité/inversions et sauvegarde locale disponibles.
 5. Ajouter déplacement via modificateur configurable, zoom par molette observée ou clavier +
    boule, sensibilités et inversions. Refuser l'arrière-plan et les états non compatibles;
@@ -380,3 +380,41 @@ du rebranchement, révision COM et mouvement du curseur. Si seul COM échoue, la
 Licence MIT. SolidWorks et ses composants ne sont pas distribués dans ce dossier.
 
 Référence pour l’horodatage des paquets : [GetMessageTime](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessagetime).
+
+
+## Activation sans maintenir Maj : mode Toggle
+
+La rotation avec maintien de Maj a été confirmée sur le poste. Le relâchement arrêtait
+volontairement la navigation. Cette version ajoute un choix **Hold / Toggle** dans
+Start-Navigation.ps1. La configuration livrée utilise Toggle ; les anciennes configurations
+sans `rotation.activationMode` conservent Hold.
+
+1. Fermer l'ancienne fenêtre et lancer un nouveau processus :
+   `powershell.exe -NoProfile -STA -File .\Start-Navigation.ps1`.
+2. Sélectionner la Kensington, cliquer **Connect SolidWorks** et choisir **Toggle**.
+3. Revenir dans la fenêtre principale SolidWorks, document pièce/assemblage ouvert.
+4. Presser **Ctrl + Maj + F9**, relâcher les touches et déplacer la boule : rotation active.
+5. Presser à nouveau **Ctrl + Maj + F9**, ou **Échap**, pour arrêter.
+6. Après perte de focus, dialogue modal détecté ou erreur, réactiver explicitement avec
+   le raccourci. Aucun redémarrage automatique de la rotation.
+7. **Save settings on close** conserve le mode choisi dans le JSON à la fermeture.
+
+Le raccourci est enregistré globalement seulement en mode Toggle, sans répétition automatique.
+S'il est déjà réservé, un message signale l'échec : utiliser Hold ou libérer le raccourci.
+Le raccourci ne démarre la rotation que dans la fenêtre principale SolidWorks. Échap et
+les raccourcis dépendent de la disponibilité de la boucle de messages ; ils ne peuvent
+pas interrompre un appel COM déjà bloqué. Le mode Hold reste utilisable comme avant.
+
+**Les clics Kensington restent des clics Windows et le curseur reste partagé.**
+Ne pas leur attribuer des commandes CAD supplémentaires dans ce prototype : elles
+s'ajouteraient aux clics natifs. Les raccourcis clavier évitent de devoir cliquer avec
+la Kensington pour activer la navigation ; ils ne suppriment pas ses clics. Aucun blocage
+global des souris, repositionnement du curseur ou pilote n'est ajouté. L'indépendance
+complète demandée n'est donc toujours pas satisfaite.
+
+Validation de cette évolution : contrôles statiques locaux uniquement. La compilation
+Add-Type, l'enregistrement du raccourci, l'arrêt sur perte de focus et la bascule pendant
+la rotation doivent être testés sur Windows. Les tests PowerShell couvrent aussi la
+persistance du mode, les anciens fichiers et le rejet d'un mode inconnu.
+
+Référence : [RegisterHotKey et MOD_NOREPEAT](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey).
