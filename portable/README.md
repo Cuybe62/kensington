@@ -164,6 +164,7 @@ Check-Environment.ps1          hôte, politiques, Add-Type, Forms, Raw Input, CO
 Start-TrackballCAD.ps1         configuration, chargement, boucle UI, sauvegarde
 src/RawInputBridge.cs          P/Invoke, fenêtre message-only, capture et accumulateurs
 src/DiagnosticsWindow.cs       petite fenêtre diagnostic, handlers entièrement C#
+src/SolidWorksProbe.cs         acquisition COM et lecture de révision, rapport par étape
 modules/Portable.Runtime.psm1  prérequis et compilation à la demande
 modules/Portable.Configuration.psm1  JSON local
 modules/SolidWorks.Probe.psm1   connexion COM existante, lecture de révision uniquement
@@ -201,6 +202,18 @@ réactif avant de le lancer.
 
 ## Validation
 
+Un rapport utilisateur confirme PowerShell 5.1 x64 STA, FullLanguage, Add-Type,
+Windows Forms et trois collections Raw Input, mais échoue avec `0x8002802B`
+(`TYPE_E_ELEMENTNOTFOUND`) au test COM. La cause n'est pas encore établie.
+
+Le diagnostic conserve maintenant l'objet COM dans C# et lit `RevisionNumber` via
+`Type.InvokeMember`, sans découverte automatique des membres COM par PowerShell.
+Cette voie d'appel ne change aucune autorisation et reste à tester sur le poste.
+Le rapport distingue `ObjectAcquired`, `RevisionRead`, `Stage`, `HResult` et
+`CleanupError`. `Connected` signifie ici que l'objet et sa révision sont accessibles;
+aucune méthode de vue n'est testée. Les politiques sont affichées par nom dans le JSON.
+Relancer le diagnostic dans un nouveau processus après mise à jour.
+
 Tests automatiques proposés sur Windows :
 
 ```powershell
@@ -228,5 +241,6 @@ du rebranchement, révision COM et mouvement du curseur. Si seul COM échoue, la
 - [RAWMOUSE : X/Y, boutons, molette](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-rawmouse)
 - [WM_INPUT et DefWindowProc](https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-input)
 - [RevisionNumber, ISldWorks](https://help.solidworks.com/2022/english/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.ISldWorks~RevisionNumber.html)
+- [Type.InvokeMember et objets COM](https://learn.microsoft.com/en-us/dotnet/api/system.type.invokemember?view=netframework-4.8)
 
 Licence MIT. SolidWorks et ses composants ne sont pas distribués dans ce dossier.

@@ -1,29 +1,39 @@
 Set-StrictMode -Version Latest
 
 function Test-ExistingSolidWorks {
-    # Read-only probe on the calling STA. Never creates a COM server or opens a document.
-    $application = $null
-    $result = [ordered]@{ Connected = $false; Revision = $null; RunningProcessCount = 0; Detail = '' }
+    # Read-only probe. No COM object crosses the PowerShell adapter boundary.
+    $result = [ordered]@{
+        Connected = $false; ObjectAcquired = $false; RevisionRead = $false
+        Revision = $null; RunningProcessCount = 0; Stage = 'CompileProbe'
+        HResult = $null; CleanupError = ''; Detail = ''
+    }
     try {
-        if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') { throw 'COM probe requires STA.' }
         $result.RunningProcessCount = @(Get-Process -Name SLDWORKS -ErrorAction SilentlyContinue).Count
-        $application = [Runtime.InteropServices.Marshal]::GetActiveObject('SldWorks.Application')
-        # Official signature: string ISldWorks.RevisionNumber(). No document/view mutation.
-        $result.Revision = [string]$application.RevisionNumber()
-        $result.Connected = $true
-        $result.Detail = 'Existing COM instance accessible; view methods not tested.'
+        if (!('TrackballCAD.Portable.SolidWorksProbe' -as [type])) {
+            Add-Type -LiteralPath (Join-Path $PSScriptRoot '../src/SolidWorksProbe.cs') -ErrorAction Stop
+        }
+        $probe = [TrackballCAD.Portable.SolidWorksProbe]::Run()
+        $result.ObjectAcquired = $probe.ObjectAcquired
+        $result.RevisionRead = $probe.RevisionRead
+        $result.Connected = $probe.ObjectAcquired -and $probe.RevisionRead
+        $result.Revision = $probe.Revision
+        $result.Stage = $probe.Stage
+        $result.HResult = $probe.HResult
+        $result.CleanupError = $probe.CleanupError
+        if ($result.Connected) {
+            $result.Detail = 'Existing COM object acquired and RevisionNumber read via C# InvokeMember. View methods not tested.'
+        } else {
+            $result.Detail = "Failure at $($probe.Stage) ($($probe.HResult)): $($probe.Error). ObjectAcquired=$($probe.ObjectAcquired). No installation or security settings changed."
+        }
+        if ($probe.CleanupError) { $result.Detail += " Reference cleanup: $($probe.CleanupError)" }
         if ($result.RunningProcessCount -gt 1) {
-            $result.Detail += ' Multiple instances detected: GetActiveObject does not select a specific instance. Keep only the intended instance for later tests.'
+            $result.Detail += ' Multiple SolidWorks instances: GetActiveObject does not select a specific instance.'
         }
     } catch {
         $exception = $_.Exception
         while ($null -ne $exception.InnerException) { $exception = $exception.InnerException }
-        $result.Detail = ('COM probe failed (HRESULT 0x{0:X8}): {1}. Open SolidWorks normally under the same Windows account, wait until it is ready and close modal dialogs. If access is prohibited, ask school IT; do not elevate or register anything.' -f $exception.HResult, $exception.Message)
-    } finally {
-        # Release only the reference acquired by this probe, never FinalRelease or ExitApp.
-        if ($null -ne $application -and [Runtime.InteropServices.Marshal]::IsComObject($application)) {
-            [void][Runtime.InteropServices.Marshal]::ReleaseComObject($application)
-        }
+        $result.HResult = '0x{0:X8}' -f $exception.HResult
+        $result.Detail = "Probe preparation failed: $($exception.Message). No workaround for school restrictions is attempted."
     }
     [pscustomobject]$result
 }

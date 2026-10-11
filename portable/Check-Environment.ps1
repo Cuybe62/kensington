@@ -76,7 +76,9 @@ if ($ReportPath) {
             Apartment = [string][Threading.Thread]::CurrentThread.GetApartmentState()
             LanguageMode = [string]$ExecutionContext.SessionState.LanguageMode
             EffectivePolicy = [string](Get-ExecutionPolicy)
-            Policies = @(Get-ExecutionPolicy -List | Select-Object Scope, ExecutionPolicy)
+            Policies = @(Get-ExecutionPolicy -List | ForEach-Object {
+                [pscustomobject]@{ Scope = [string]$_.Scope; ExecutionPolicy = [string]$_.ExecutionPolicy }
+            })
             Checks = @($checks.ToArray())
             Devices = $devices
             SolidWorks = $com

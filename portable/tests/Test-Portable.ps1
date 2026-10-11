@@ -6,6 +6,7 @@ Import-Module (Join-Path $root 'modules/Portable.Runtime.psm1') -ErrorAction Sto
 Import-Module (Join-Path $root 'modules/Portable.Configuration.psm1') -ErrorAction Stop
 Assert-PortableHost
 Import-PortableBridge
+Add-Type -LiteralPath (Join-Path $root 'src/SolidWorksProbe.cs') -ErrorAction Stop
 $passed = 0
 function Assert-Result {
     param([bool]$Condition, [string]$Name)
