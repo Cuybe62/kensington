@@ -8,6 +8,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: microsoft/setup-msbuild@v2
+      - name: Check Windows PowerShell script syntax
+        shell: powershell
+        run: |
+          foreach ($script in Get-ChildItem scripts/*.ps1) {
+            $tokens = $null
+            $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($script.FullName, [ref]$tokens, [ref]$parseErrors)
+            if ($parseErrors.Count -gt 0) { throw ($parseErrors | Out-String) }
+          }
       - name: Build diagnostics (no SolidWorks SDK required)
         run: msbuild src/TrackballCAD.UI/TrackballCAD.UI.csproj /restore /p:Configuration=Release /p:Platform=x64
       - name: Build tests

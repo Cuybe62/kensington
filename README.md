@@ -1,5 +1,12 @@
 # TrackballCAD — prototype Windows x64
 
+> **Poste d'école sans Visual Studio : utiliser [TrackballCAD Portable](portable/README.md).**
+> Cette variante autonome se trouve dans `portable/` : Windows PowerShell 5.1 x64 STA,
+> compilation à la demande par Add-Type, aucun add-in ni enregistrement administrateur.
+> Commencer par `portable/Check-Environment.ps1`, puis `portable/Start-TrackballCAD.ps1`.
+> Elle couvre pour l'instant le diagnostic et la capture; les instructions ci-dessous
+> concernent l'ancienne variante Visual Studio et ne s'appliquent pas au poste d'école.
+
 TrackballCAD transforme une deuxième souris ou trackball en contrôleur de navigation CAD dédié.
 
 **État : MVP expérimental implémenté, non compilé et non validé sur Windows/SolidWorks.**
@@ -48,6 +55,23 @@ committer. Pan, zoom, roll, profils, accélération et persistance sont volontai
 
 ## Compiler sous Windows
 
+**Premier lancement : ne pas utiliser `Add-AppxPackage` ni `Add-AppPackage`.** Ce projet
+ne produit pas de paquet `.appx` ou `.msix`. Le diagnostic est un `.exe` classique et
+le complément SolidWorks est une DLL COM.
+
+Après installation des prérequis ci-dessous, ouvrir PowerShell dans le dossier contenant
+`TrackballCAD.sln`, puis lancer :
+
+```powershell
+.\scripts\Start-Diagnostics.ps1
+```
+
+Ce script trouve MSBuild (dans le PATH ou via Visual Studio Installer), compile le diagnostic
+et les tests, exécute les tests puis ouvre la fenêtre. Il ne demande aucun chemin de paquet
+et ne nécessite ni droits administrateur ni SDK SolidWorks. Si la compilation échoue,
+il s'arrête en conservant les messages MSBuild. Les chemins sont calculés depuis le script,
+pas depuis le répertoire courant. Utiliser `-Configuration Release` pour une compilation Release.
+
 Installer Visual Studio avec « Développement Desktop .NET », le SDK .NET utilisé par
 les projets au format SDK et le targeting/developer pack .NET Framework 4.8.
 Pour l'add-in : installation SolidWorks x64 et API SDK correspondant à la version à tester.
@@ -87,6 +111,9 @@ Le dossier doit contenir `SolidWorks.Interop.sldworks.dll` et
    `.\scripts\Register-Addin.ps1`. Le script appelle **RegAsm Framework64** avec `/codebase`
    et inscrit le complément dans HKLM. Garder toutes les DLL du répertoire de sortie ensemble.
    L'assembly de développement n'est pas signé; l'avertissement `/codebase` est attendu.
+   Le script vérifie la DLL, ses dépendances, la fermeture de SolidWorks et les droits
+   administrateur avant l'enregistrement. Pour une compilation Release, ajouter
+   `-Configuration Release`; aucun paramètre `Path` n'est nécessaire.
 2. Ouvrir SolidWorks; activer **TrackballCAD** dans Outils → Compléments. Le chargement
    automatique n'est pas activé par le script. Ouvrir une pièce ou un assemblage éditable.
 3. Lancer `TrackballCAD.UI.exe` avec le même compte Windows. La fenêtre propose le PID

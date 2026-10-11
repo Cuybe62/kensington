@@ -60,5 +60,8 @@ Aucun contournement de ce type n'est présenté comme garantissant l'indépendan
    `scripts/Register-Addin.ps1`. Compiler avec SDK, enregistrer, charger et tester une pièce.
 6. **Validation** : `tests/TrackballCAD.Tests/Program.cs`, workflow Windows et `docs/validation.md`.
    Les sources sont complètes dans ces fichiers; aucune étape n'exige du code à recopier depuis le chat.
+   `scripts/Start-Diagnostics.ps1` automatise la compilation du diagnostic, celle des tests,
+   leur exécution et l'ouverture de l'interface sans SDK SolidWorks. La CI vérifie aussi
+   la syntaxe des scripts avec le parseur Windows PowerShell.
 
 Ne pas passer au pan/zoom/roll tant que les étapes matérielles ne sont pas acceptées.

@@ -1,0 +1,23 @@
+name: Portable PowerShell 5.1
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse portable PowerShell sources
+        shell: powershell
+        run: |
+          foreach ($file in Get-ChildItem portable -Recurse -File | Where-Object { $_.Extension -in '.ps1', '.psm1' }) {
+            $tokens = $null
+            $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$parseErrors)
+            if ($parseErrors.Count -gt 0) { throw ($parseErrors | Out-String) }
+          }
+      - name: Add-Type compilation and portable tests
+        shell: powershell
+        run: |
+          & "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -STA -File ./portable/tests/Test-Portable.ps1
+          if ($LASTEXITCODE -ne 0) { throw "Portable tests failed: $LASTEXITCODE" }

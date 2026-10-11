@@ -20,6 +20,10 @@ ne remplace pas une compilation. Utiliser une pièce de test, puis un assemblage
 ## A — lecture indépendante (avant activation CAD)
 
 1. Compiler le diagnostic seul et les tests; exécuter les tests, exiger le code de sortie zéro.
+   `scripts/Start-Diagnostics.ps1` automatise cette étape puis ouvre le diagnostic.
+   Vérifier aussi son lancement depuis un chemin contenant des espaces. Pour l'enregistrement,
+   vérifier les messages de `Register-Addin.ps1` avec DLL absente, dépendance absente,
+   console non administrateur et SolidWorks encore ouvert; aucune inscription ne doit commencer.
 2. Lancer le diagnostic, bouger uniquement la souris principale, noter handle et chemin.
 3. Bouger uniquement la trackball : une autre ligne doit recevoir dx/dy.
 4. Tester les deux en même temps; chaque ligne doit recevoir les événements correspondants.
