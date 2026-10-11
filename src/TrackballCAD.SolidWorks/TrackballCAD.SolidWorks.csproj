@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../TrackballCAD.Navigation/TrackballCAD.Navigation.csproj" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="SolidWorks.Interop.sldworks"><HintPath>$(SolidWorksInteropPath)/SolidWorks.Interop.sldworks.dll</HintPath><EmbedInteropTypes>false</EmbedInteropTypes><Private>true</Private></Reference>
+    <Reference Include="SolidWorks.Interop.swpublished"><HintPath>$(SolidWorksInteropPath)/SolidWorks.Interop.swpublished.dll</HintPath><EmbedInteropTypes>false</EmbedInteropTypes><Private>true</Private></Reference>
+  </ItemGroup>
+  <Target Name="CheckSolidWorksSdk" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(SolidWorksInteropPath)/SolidWorks.Interop.sldworks.dll') Or !Exists('$(SolidWorksInteropPath)/SolidWorks.Interop.swpublished.dll')" Text="Set SolidWorksInteropPath to the local SOLIDWORKS api/redist folder. See README.md." />
+  </Target>
+</Project>

@@ -1,0 +1,16 @@
+name: Windows core and diagnostics
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build diagnostics (no SolidWorks SDK required)
+        run: msbuild src/TrackballCAD.UI/TrackballCAD.UI.csproj /restore /p:Configuration=Release /p:Platform=x64
+      - name: Build tests
+        run: msbuild tests/TrackballCAD.Tests/TrackballCAD.Tests.csproj /restore /p:Configuration=Release /p:Platform=x64
+      - name: Run tests
+        run: ./tests/TrackballCAD.Tests/bin/Release/net48/TrackballCAD.Tests.exe

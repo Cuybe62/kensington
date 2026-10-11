@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <ProjectReference Include="../../src/TrackballCAD.Input/TrackballCAD.Input.csproj" />
+    <ProjectReference Include="../../src/TrackballCAD.Navigation/TrackballCAD.Navigation.csproj" />
+    <ProjectReference Include="../../src/TrackballCAD.Settings/TrackballCAD.Settings.csproj" />
+  </ItemGroup>
+</Project>
