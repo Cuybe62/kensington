@@ -37,6 +37,7 @@ namespace TrackballCAD.Portable
         internal static extern uint GetRawInputData(IntPtr input, uint command, IntPtr data, ref uint size, uint headerSize);
         [DllImport("user32.dll", SetLastError = true)]
         internal static extern uint GetRegisteredRawInputDevices([In, Out] Registration[] devices, ref uint count, uint size);
+        [DllImport("user32.dll")] internal static extern int GetMessageTime();
     }
 
     public sealed class DeviceInfo
@@ -77,6 +78,13 @@ namespace TrackballCAD.Portable
         public ushort HeldButtons { get; internal set; }
         public ushort LastButtonFlags { get; internal set; }
         public ushort IntervalButtonFlags { get; internal set; }
+    }
+
+    public struct RawMousePacket
+    {
+        public long Device;
+        public int X, Y, MessageTick;
+        public bool Absolute;
     }
 
     // Pure managed accumulator. No PowerShell callback, UI operation or COM call here.
@@ -133,6 +141,8 @@ namespace TrackballCAD.Portable
         public bool DevicesChanged { get; private set; }
         public string LastError { get; private set; }
         public long UnidentifiedEvents { get; private set; }
+        // Subscribe only from managed C#; never attach a PowerShell script block.
+        public event Action<RawMousePacket> MouseInput;
 
         public static DeviceInfo[] EnumerateDevices()
         {
@@ -250,6 +260,11 @@ namespace TrackballCAD.Portable
             { UnidentifiedEvents++; return; }
             Native.Mouse mouse = (Native.Mouse)Marshal.PtrToStructure(IntPtr.Add(buffer, (int)headerSize), typeof(Native.Mouse));
             accumulator.Add(mouse.X, mouse.Y, mouse.ButtonFlags, mouse.ButtonData, (mouse.Flags & 1) != 0);
+            Action<RawMousePacket> handler = MouseInput;
+            if (handler != null) handler(new RawMousePacket {
+                Device = header.Device.ToInt64(), X = mouse.X, Y = mouse.Y,
+                Absolute = (mouse.Flags & 1) != 0, MessageTick = Native.GetMessageTime()
+            });
         }
         public void Dispose()
         {

@@ -4,7 +4,7 @@
 > Cette variante autonome se trouve dans `portable/` : Windows PowerShell 5.1 x64 STA,
 > compilation à la demande par Add-Type, aucun add-in ni enregistrement administrateur.
 > Commencer par `portable/Check-Environment.ps1`, puis `portable/Start-TrackballCAD.ps1`.
-> Elle couvre pour l'instant le diagnostic et la capture; les instructions ci-dessous
+> Elle propose le diagnostic, la capture et un prototype de rotation continue; les instructions ci-dessous
 > concernent l'ancienne variante Visual Studio et ne s'appliquent pas au poste d'école.
 
 TrackballCAD transforme une deuxième souris ou trackball en contrôleur de navigation CAD dédié.

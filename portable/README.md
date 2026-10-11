@@ -1,14 +1,14 @@
-# TrackballCAD Portable — diagnostic de faisabilité
+# TrackballCAD Portable — prototype de rotation
 
 Prototype pour Windows PowerShell **5.1 Desktop, 64 bits, STA**, sans Visual Studio,
 SDK à installer, NuGet, pilote ou droits administrateur. Le dossier `portable` est
 autonome : copier son contenu dans un dossier autorisé sur le poste de l'école.
 
-**Cette livraison réalise les étapes 1 et 2 : diagnostic et capture indépendante.**
-Elle teste aussi l'accès COM en lecture seule à SolidWorks déjà ouvert. Un outil séparé
-`Test-SolidWorksView.ps1` permet désormais un test explicite d'une seule rotation.
-La capture et le diagnostic ne commandent toujours aucune vue; la liaison continue
-trackball → rotation et le déplacement/zoom restent à développer après validation du test.
+**Le diagnostic COM et le test de rotation de 5° ont été validés par l'utilisateur sur
+la révision 33.5.0, avec un assemblage.** Cette livraison ajoute la liaison continue
+trackball → rotation, à tester sur le poste. Le déplacement et le zoom restent reportés.
+`Check-Environment.ps1` et `Start-TrackballCAD.ps1` restent des outils sans commande de vue;
+seuls le test explicite et le nouveau `Start-Navigation.ps1` peuvent orienter la vue.
 
 ## Lancer sans modifier les politiques
 
@@ -117,11 +117,18 @@ Un clic bref entre deux rafraîchissements reste visible dans les flags d'interv
 {
   "schemaVersion": 1,
   "diagnosticsRefreshMs": 100,
-  "selectedDevice": null
+  "selectedDevice": null,
+  "rotation": {
+    "updateHz": 30,
+    "activationKey": "LeftShift",
+    "radiansPerCount": 0.002,
+    "invertX": false,
+    "invertY": false
+  }
 }
 ```
 
-Intervalle autorisé : 50 à 1000 ms. Il concerne uniquement le diagnostic, pas une future
+Intervalle autorisé : 50 à 1000 ms. Il concerne uniquement le diagnostic, pas la
 cadence de navigation. Le périphérique confirmé est sauvegardé avec `path`, `vid`, `pid`,
 `label`. VID/PID caractérise souvent un modèle, pas un exemplaire. Le chemin peut changer
 après changement de port; le nom affiché est un libellé HID générique, pas un nom commercial
@@ -139,7 +146,8 @@ powershell.exe -NoProfile -STA -File .\Start-TrackballCAD.ps1 -ConfigPath .\conf
 
 Le rapport utilisateur confirme désormais `ObjectAcquired=true`, `RevisionRead=true`,
 `Stage=Complete` et la révision **33.5.0**. C'est une validation de l'accès COM et de
-la lecture de version sur le poste; aucune méthode de vue n'a encore été validée.
+la lecture de version sur le poste. L'utilisateur a ensuite confirmé une rotation visible
+et `RotationApplied=true`, `RedrawCompleted=true`, `Stage=Complete` sur un assemblage.
 
 ```powershell
 powershell.exe -NoProfile -STA -File .\Test-SolidWorksView.ps1
@@ -180,7 +188,72 @@ pour cette unique rotation.
 Les contenus 2025 de `ActiveDoc`, `IsOpenedViewOnly` et `GraphicsRedraw2` ont été consultés.
 Les pages 2025 de rotation/vue ont renvoyé un cadre de navigation sans contenu exploitable;
 leurs signatures ont été vérifiées dans les éditions officielles antérieures ci-dessous.
-L'appel réel de ces méthodes en 33.5.0 reste donc explicitement à confirmer sur le poste.
+Le test réel de rotation et de rafraîchissement a depuis réussi sur le poste en 33.5.0.
+Cela ne valide pas encore leur performance lors d'une navigation continue.
+
+## Étape 4 — rotation continue avec la Kensington
+
+Extraire la nouvelle archive dans un dossier distinct. On peut y copier l'ancien `config.json` :
+les anciennes configurations de diagnostic restent compatibles et utilisent les réglages par défaut.
+
+```powershell
+powershell.exe -NoProfile -STA -File .\Start-Navigation.ps1
+```
+
+1. Choisir la Kensington dans la liste (celle identifiée dans le diagnostic; `047D:80D6` sur
+   le poste rapporté). Si le chemin exact était sauvegardé, il est présélectionné, mais la
+   navigation reste désactivée. VID/PID seuls ne provoquent aucune sélection automatique.
+2. Cliquer **Connect SolidWorks**, puis **Enable rotation**. Ouvrir une pièce ou un assemblage
+   complètement chargé et revenir dans la fenêtre principale SolidWorks **sans maintenir Maj**.
+3. Maintenir **Maj gauche / LeftShift**, puis faire rouler la boule. Relâcher pour arrêter le geste.
+   X tourne horizontalement autour de Y écran; Y tourne verticalement autour de X écran.
+4. **Échap désactive la navigation**, même dans SolidWorks, tant que la boucle UI répond.
+   Cliquer de nouveau Enable rotation pour reprendre. Le bouton STOP fait la même chose.
+5. Ajuster `rad/count` pour changer la sensibilité et Invert X/Y pour les sens. Toute modification
+   arrête la navigation : cliquer de nouveau Enable rotation. Si c'est trop lent, essayer
+   `0.004` au lieu de `0.002`. La rotation unique de l'étape précédente était volontairement
+   limitée à 5°; la rotation continue n'a pas de limite angulaire totale.
+6. Rester d'abord à 30 Hz. Le compteur **API updates** mesure les mises à jour ayant effectué
+   rotation et rafraîchissement avec succès; il ne mesure pas les images GPU. `last COM` mesure
+   la durée du traitement CAD du dernier mouvement. Les timers Windows ne garantissent pas
+   la cadence demandée : relever les valeurs avant d'essayer 45 ou 60 Hz.
+7. Pour conserver les réglages, cliquer **Save settings on close**, puis fermer la fenêtre.
+   La sauvegarde concerne `config.json`, jamais le document CAD.
+
+Le modificateur est configurable : LeftShift, RightShift, LeftControl ou RightControl.
+Ces touches ne sont pas supprimées pour Windows et peuvent modifier les sélections/commandes
+natives lorsque l'on utilise simultanément la souris. Les clics et la molette de la Kensington
+restent natifs; ils ne déclenchent pas la navigation dans cette étape. Le curseur bouge toujours.
+
+La capture déclenche uniquement un handler **C#** qui vérifie le modificateur/le premier plan
+par Win32 et accumule les deltas du handle sélectionné. Aucun COM dans `WM_INPUT`. Le timer
+WinForms du même STA consomme les deltas et appelle l'adaptateur CAD; sa réentrance est bloquée.
+Le document et la vue sont conservés pendant un geste, puis relus pour vérifier leur identité
+avant les rotations. Les paquets vieux de plus de 150 ms sont rejetés à partir du temps du
+message Windows, pas seulement de sa date de traitement, avec gestion du bouclage du compteur.
+Les paquets antérieurs à l'activation de la touche sont aussi écartés. La détection de la touche
+est échantillonnée; elle n'est pas une reconstruction exacte de l'ordre matériel clavier/souris.
+
+La perte de premier plan ou un dialogue empêchant l'accès à la fenêtre principale annule le
+geste et exige un relâchement puis une nouvelle pression dans SolidWorks. Un changement de
+périphériques enlève la sélection et désactive la navigation. Un changement de document/vue,
+une erreur COM ou une mise à jour dépassant 150 ms désactive la navigation sans retry automatique.
+Revenir à un état prêt puis réactiver, ou reconnecter si SolidWorks a été fermé. Les états internes
+non modaux de SolidWorks ne sont pas tous détectables par le test de fenêtre : terminer les
+commandes avant l'essai. Échap ne peut pas interrompre immédiatement un appel COM bloqué.
+
+Les rotations par mise à jour sont plafonnées à ±0,15 rad (~8,6°) par axe pour éviter un saut
+important. À grande vitesse, cette protection peut tronquer une partie du mouvement. Il n'y a
+ni accélération ni lissage pour l'instant. Aucun mouvement ancien n'est rejoué pour rattraper
+un retard. Les objets COM sont libérés au relâchement/changement de geste et à la fermeture.
+
+À tester avant le déplacement ou le zoom :
+
+- trackball seule avec/sans modificateur; souris principale seule avec le même modificateur;
+- arrêt au relâchement, Échap, Alt-Tab et absence de reprise avec la touche encore maintenue;
+- débranchement/rebranchement, fermeture/changement du document, dessin, dialogue modal;
+- sens X/Y, sensibilité, fréquence réelle sur petit et gros assemblages, dérive du curseur;
+- sauvegarde/relecture JSON, fermeture de SolidWorks et reconnexion manuelle.
 
 ## Limite du curseur — critère principal non satisfait
 
@@ -210,11 +283,15 @@ la validation devra constater cette limite plutôt que prétendre avoir réussi.
 ```text
 Check-Environment.ps1          hôte, politiques, Add-Type, Forms, Raw Input, COM
 Test-SolidWorksView.ps1        test de rotation uniquement après clic sur Armer
+Start-Navigation.ps1           rotation continue, désactivée au démarrage
 Start-TrackballCAD.ps1         configuration, chargement, boucle UI, sauvegarde
 src/RawInputBridge.cs          P/Invoke, fenêtre message-only, capture et accumulateurs
 src/DiagnosticsWindow.cs       petite fenêtre diagnostic, handlers entièrement C#
 src/SolidWorksProbe.cs         acquisition COM et lecture de révision, rapport par étape
 src/SolidWorksViewTest.cs       test COM de vue et petite fenêtre d'armement
+src/RotationEngine.cs          sélection, modificateur, deltas, sensibilité, expiration
+src/SolidWorksRotationAdapter.cs  appels COM de rotation sur le STA
+src/NavigationWindow.cs        activation, réglages et mesure du débit
 modules/Portable.Runtime.psm1  prérequis et compilation à la demande
 modules/Portable.Configuration.psm1  JSON local
 modules/SolidWorks.Probe.psm1   connexion COM existante, lecture de révision uniquement
@@ -232,9 +309,9 @@ Une inscription Raw Input préexistante dans le processus est refusée plutôt q
 
 État des prochaines étapes :
 
-3. Test explicite de petite rotation fourni; **validation Windows/SolidWorks en attente**.
-4. Relier la boule à la rotation via modificateur clavier, accumulation et appels COM sérialisés
-   sur STA à 30 Hz initialement, puis mesurer jusqu'à 60 Hz.
+3. Test explicite de petite rotation **validé par retour utilisateur** sur 33.5.0.
+4. Liaison boule → rotation fournie, validation continue **en attente**, cible 30 Hz réglable
+   jusqu'à 60 Hz; sensibilité/inversions et sauvegarde locale disponibles.
 5. Ajouter déplacement via modificateur configurable, zoom par molette observée ou clavier +
    boule, sensibilités et inversions. Refuser l'arrière-plan et les états non compatibles;
    gérer refus COM, dialogues, fermeture et arrêt accessible. Aucune modification de géométrie
@@ -271,11 +348,14 @@ powershell.exe -NoProfile -STA -File .\tests\Test-Portable.ps1
 
 Ils compilent les sources via Add-Type et vérifient le layout x64, l'accumulation, les boutons,
 les molettes signées, les coordonnées absolues, l'indépendance de deux accumulateurs et le JSON.
+Ils couvrent aussi le filtre par périphérique du moteur de rotation, l'activation par touche,
+la perte de focus, l'expiration des deltas, les inversions, le plafonnement et le JSON de rotation.
 Ils ne prouvent pas l'identité des périphériques physiques ni la connexion COM réelle.
 
 **Sur l'environnement Linux de création :** fichiers et références contrôlés statiquement;
-PowerShell 5.1, Win32 et SolidWorks indisponibles. Aucun résultat Windows n'est annoncé comme
-acquis. Une CI Windows séparée est fournie dans le dépôt, sans résultat d'exécution local.
+PowerShell 5.1, Win32 et SolidWorks indisponibles. Les validations COM et rotation unique
+mentionnées ici proviennent des rapports utilisateur. La nouvelle rotation continue et les
+nouveaux tests n'ont pas été exécutés ici. Une CI Windows séparée est fournie dans le dépôt.
 
 À rapporter après les essais : version/architecture/langage, erreurs exactes, nombre de collections,
 chemin de chaque souris, dx/dy indépendants, flags de boutons, anneau exposé ou non, comportement
@@ -298,3 +378,5 @@ du rebranchement, révision COM et mouvement du curseur. Si seul COM échoue, la
 - [RotateAboutCenter, aide 2021](https://help.solidworks.com/2021/english/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.IModelView~RotateAboutCenter.html?format=P&value=)
 
 Licence MIT. SolidWorks et ses composants ne sont pas distribués dans ce dossier.
+
+Référence pour l’horodatage des paquets : [GetMessageTime](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessagetime).

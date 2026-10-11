@@ -21,6 +21,11 @@ function Read-PortableConfiguration {
 function Save-PortableDevice {
     param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)]$Configuration, [Parameter(Mandatory = $true)]$Device)
     $Configuration.selectedDevice = [pscustomobject]@{ path = $Device.Path; vid = $Device.Vid; pid = $Device.Pid; label = $Device.Label }
+    Write-PortableConfiguration -Path $Path -Configuration $Configuration
+}
+
+function Write-PortableConfiguration {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)]$Configuration)
     # Replace atomically in the same directory; never truncate the previous config on write failure.
     # Resolve against the PowerShell location, which may differ from the process cwd.
     $target = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).ProviderPath
@@ -35,4 +40,37 @@ function Save-PortableDevice {
     }
 }
 
-Export-ModuleMember -Function Read-PortableConfiguration, Save-PortableDevice
+function Read-RotationSettings {
+    param([Parameter(Mandatory = $true)]$Configuration)
+    $settings = New-Object TrackballCAD.Portable.RotationSettings
+    # Older diagnostic configs remain usable, with conservative defaults.
+    if ($null -ne $Configuration.PSObject.Properties['rotation']) {
+        $rotation = $Configuration.rotation
+        if ($rotation.updateHz -isnot [int] -and $rotation.updateHz -isnot [long]) { throw 'rotation.updateHz must be an integer.' }
+        if ($rotation.activationKey -isnot [string]) { throw 'rotation.activationKey must be a string.' }
+        if ($rotation.radiansPerCount -isnot [double] -and $rotation.radiansPerCount -isnot [decimal] -and $rotation.radiansPerCount -isnot [int] -and $rotation.radiansPerCount -isnot [long]) { throw 'rotation.radiansPerCount must be a number.' }
+        if ($rotation.invertX -isnot [bool] -or $rotation.invertY -isnot [bool]) { throw 'rotation.invertX and invertY must be JSON booleans.' }
+        $settings.UpdateHz = $rotation.updateHz
+        $settings.ActivationKey = $rotation.activationKey
+        $settings.RadiansPerCount = $rotation.radiansPerCount
+        $settings.InvertX = $rotation.invertX
+        $settings.InvertY = $rotation.invertY
+    }
+    $settings.Validate()
+    return $settings
+}
+
+function Save-RotationSettings {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)]$Configuration,
+        [Parameter(Mandatory = $true)]$Settings, $Device)
+    $Settings.Validate()
+    $rotation = [pscustomobject]@{
+        updateHz = $Settings.UpdateHz; activationKey = $Settings.ActivationKey
+        radiansPerCount = $Settings.RadiansPerCount; invertX = $Settings.InvertX; invertY = $Settings.InvertY
+    }
+    $Configuration | Add-Member -MemberType NoteProperty -Name rotation -Value $rotation -Force
+    if ($null -ne $Device) { $Configuration.selectedDevice = [pscustomobject]@{ path = $Device.Path; vid = $Device.Vid; pid = $Device.Pid; label = $Device.Label } }
+    Write-PortableConfiguration -Path $Path -Configuration $Configuration
+}
+
+Export-ModuleMember -Function Read-PortableConfiguration, Save-PortableDevice, Read-RotationSettings, Save-RotationSettings

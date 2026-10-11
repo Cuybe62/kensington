@@ -1,5 +1,12 @@
 {
   "schemaVersion": 1,
   "diagnosticsRefreshMs": 100,
-  "selectedDevice": null
+  "selectedDevice": null,
+  "rotation": {
+    "updateHz": 30,
+    "activationKey": "LeftShift",
+    "radiansPerCount": 0.002,
+    "invertX": false,
+    "invertY": false
+  }
 }

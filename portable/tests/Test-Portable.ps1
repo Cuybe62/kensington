@@ -51,6 +51,48 @@ $first.Add(0, 0, 2, 0, $false)
 $click = $first.Consume()
 Assert-Result ($click.HeldButtons -eq 0 -and $click.IntervalButtonFlags -eq 3) 'Short click remains visible between UI ticks'
 
+function New-RawPacket {
+    param([long]$Device, [int]$X, [int]$Y, [int]$Tick, [bool]$Absolute = $false)
+    $packet = New-Object TrackballCAD.Portable.RawMousePacket
+    $packet.Device = $Device; $packet.X = $X; $packet.Y = $Y; $packet.MessageTick = $Tick; $packet.Absolute = $Absolute
+    return $packet
+}
+$rotationSettings = New-Object TrackballCAD.Portable.RotationSettings
+$engine = New-Object TrackballCAD.Portable.RotationEngine -ArgumentList $rotationSettings
+$engine.Select(11)
+Assert-Result (!$engine.UpdateGate($true, $true, 100)) 'Holding modifier while enabling cannot arm navigation'
+[void]$engine.UpdateGate($true, $false, 101)
+Assert-Result ($engine.UpdateGate($true, $true, 102)) 'Release and fresh modifier press activate rotation'
+$engine.Add((New-RawPacket 12 400 400 102), 102)
+Assert-Result (!$engine.Consume(102).HasMotion) 'Other mouse cannot rotate the view'
+$engine.Add((New-RawPacket 11 400 400 101), 102)
+Assert-Result (!$engine.Consume(102).HasMotion) 'Queued movement from before modifier press is discarded'
+$engine.Add((New-RawPacket 11 10 -20 103), 103)
+$command = $engine.Consume(104)
+Assert-Result ([Math]::Abs($command.Horizontal - 0.02) -lt 0.000001 -and [Math]::Abs($command.Vertical + 0.04) -lt 0.000001) 'Linear sensitivity and X/Y mapping'
+Assert-Result (!$engine.Consume(104).HasMotion) 'Rotation deltas are consumed only once'
+$engine.Add((New-RawPacket 11 50000 50000 105 $true), 105)
+Assert-Result (!$engine.Consume(105).HasMotion) 'Absolute device cannot generate rotation'
+$engine.Add((New-RawPacket 11 20 20 105), 300)
+Assert-Result (!$engine.Consume(300).HasMotion) 'Old Windows message timestamp is rejected'
+$engine.Add((New-RawPacket 11 20 20 301), 301)
+Assert-Result (!$engine.Consume(500).HasMotion) 'Motion cannot survive a stalled update loop'
+$engine.Add((New-RawPacket 11 20 20 501), 501)
+[void]$engine.UpdateGate($false, $true, 502)
+Assert-Result (!$engine.Consume(502).HasMotion) 'Focus loss clears pending motion'
+Assert-Result (!$engine.UpdateGate($true, $true, 503)) 'Focus regain with held modifier never re-arms'
+[void]$engine.UpdateGate($true, $false, 504)
+[void]$engine.UpdateGate($true, $true, 505)
+$rotationSettings.InvertX = $true
+$engine.Add((New-RawPacket 11 10 0 505), 505)
+Assert-Result ([Math]::Abs($engine.Consume(505).Horizontal + 0.02) -lt 0.000001) 'Horizontal inversion'
+$engine.Add((New-RawPacket 11 100000 100000 506), 506)
+$limited = $engine.Consume(506)
+Assert-Result ($limited.Horizontal -eq -0.15 -and $limited.Vertical -eq 0.15) 'Per-update angular cap prevents a huge jump'
+Assert-Result ([TrackballCAD.Portable.RotationEngine]::IsFresh(2147483640, -2147483640)) 'Tick count wrap is handled'
+$engine.Select(12)
+Assert-Result (!$engine.Active -and !$engine.Consume(507).HasMotion) 'Device selection cancels gesture and motion'
+
 $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) ('TrackballCAD-test-' + [Guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($temporaryDirectory)
 try {
@@ -62,6 +104,13 @@ try {
     Save-PortableDevice -Path $path -Configuration $configuration -Device $device
     $restored = Read-PortableConfiguration -Path $path
     Assert-Result ($restored.selectedDevice.path -eq $device.Path) 'Device path JSON round trip'
+    $settings = Read-RotationSettings -Configuration $restored
+    $settings.UpdateHz = 45
+    Save-RotationSettings -Path $path -Configuration $restored -Settings $settings -Device $device
+    $roundTrip = Read-PortableConfiguration -Path $path
+    Assert-Result ((Read-RotationSettings -Configuration $roundTrip).UpdateHz -eq 45) 'Rotation settings JSON round trip'
+    $legacy = '{"schemaVersion":1,"diagnosticsRefreshMs":100,"selectedDevice":null}' | ConvertFrom-Json
+    Assert-Result ((Read-RotationSettings -Configuration $legacy).ActivationKey -eq 'LeftShift') 'Older diagnostic config uses safe rotation defaults'
     $bad = '{"schemaVersion":1,"diagnosticsRefreshMs":0,"selectedDevice":null}'
     Set-Content -LiteralPath $path -Value $bad -Encoding UTF8
     $rejected = $false
