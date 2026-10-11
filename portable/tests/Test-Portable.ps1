@@ -7,6 +7,7 @@ Import-Module (Join-Path $root 'modules/Portable.Configuration.psm1') -ErrorActi
 Assert-PortableHost
 Import-PortableBridge
 Add-Type -LiteralPath (Join-Path $root 'src/SolidWorksProbe.cs') -ErrorAction Stop
+Add-Type -LiteralPath (Join-Path $root 'src/SolidWorksViewTest.cs') -ReferencedAssemblies System.dll,System.Core.dll,System.Windows.Forms.dll,System.Drawing.dll -ErrorAction Stop
 $passed = 0
 function Assert-Result {
     param([bool]$Condition, [string]$Name)

@@ -5,9 +5,10 @@ SDK à installer, NuGet, pilote ou droits administrateur. Le dossier `portable` 
 autonome : copier son contenu dans un dossier autorisé sur le poste de l'école.
 
 **Cette livraison réalise les étapes 1 et 2 : diagnostic et capture indépendante.**
-Elle teste aussi l'accès COM en lecture seule à SolidWorks déjà ouvert. Elle ne fait
-encore aucune rotation, aucun déplacement ni zoom. La navigation sera développée
-après confirmation de la faisabilité sur le poste et de la version SolidWorks.
+Elle teste aussi l'accès COM en lecture seule à SolidWorks déjà ouvert. Un outil séparé
+`Test-SolidWorksView.ps1` permet désormais un test explicite d'une seule rotation.
+La capture et le diagnostic ne commandent toujours aucune vue; la liaison continue
+trackball → rotation et le déplacement/zoom restent à développer après validation du test.
 
 ## Lancer sans modifier les politiques
 
@@ -134,6 +135,53 @@ Un autre fichier JSON peut être indiqué explicitement :
 powershell.exe -NoProfile -STA -File .\Start-TrackballCAD.ps1 -ConfigPath .\config.json
 ```
 
+## Étape 3 — petite rotation explicite (révision 33.x)
+
+Le rapport utilisateur confirme désormais `ObjectAcquired=true`, `RevisionRead=true`,
+`Stage=Complete` et la révision **33.5.0**. C'est une validation de l'accès COM et de
+la lecture de version sur le poste; aucune méthode de vue n'a encore été validée.
+
+```powershell
+powershell.exe -NoProfile -STA -File .\Test-SolidWorksView.ps1
+```
+
+1. Garder une seule instance SolidWorks ouverte avec une pièce ou un assemblage de test
+   entièrement chargé. Terminer les commandes et fermer les dialogues. Utiliser la fenêtre
+   principale, pas un document détaché.
+2. Cliquer **Arm one 5 degree rotation (5 s)**, puis revenir dans SolidWorks avant cinq secondes.
+3. Le test demande une seule rotation horizontale de 5° autour du centre de la vue, suivie
+   d'un rafraîchissement graphique. Aucune géométrie n'est modifiée et rien n'est enregistré.
+4. Échap annule le compte à rebours, même lorsque SolidWorks est au premier plan.
+5. Revenir dans la fenêtre pour lire le résultat, puis la fermer : le même résultat JSON
+   apparaît dans la console. Rapporter `Stage`, `RotationRequested`, `RotationApplied`,
+   `RedrawCompleted`, `HResult` et si le modèle a effectivement tourné.
+
+Le test utilise le même appel tardif C# `InvokeMember` que le diagnostic maintenant validé.
+Il vérifie le PID de l'objet COM, la fenêtre principale au premier plan et activée, le document
+de type pièce/assemblage, l'absence de mode view-only et la présence de `ActiveView`. Un changement
+de document pendant la préparation annule l'action. La révision est limitée à 33.x pour ce test.
+La préparation trop longue et un compte à rebours retardé sont abandonnés, sans rattrapage.
+
+Un refus COM termine l'essai sans nouvelle tentative automatique. `RotationRequested=true`
+avec une erreur signifie qu'une action a pu être envoyée : observer la vue avant de relancer.
+Si seul le rafraîchissement échoue, `RotationApplied` reste vrai. Un appel COM synchrone bloqué
+ne peut pas être interrompu instantanément par Échap; les tests de fenêtre ne détectent pas tous
+les états internes de SolidWorks. Aucun test ne force le premier plan ni ne ferme un dialogue.
+La rotation n'est pas automatiquement inversée : l'utilisateur garde le contrôle de la vue.
+
+Signatures consultées dans l'aide officielle : `object ActiveDoc { get; }`,
+`object ActiveView { get; }`, `int GetType()`, `bool IsOpenedViewOnly()`,
+`void RotateAboutCenter(double XAngle, double YAngle)` et `void GraphicsRedraw2()`.
+Le test appelle `(0, Math.PI / 36)` pour une rotation autour de l'axe écran Y.
+`GraphicsRedraw2` reste documenté en 2025 mais est marqué obsolète par l'éditeur; utilisé
+ici pour ce premier test de compatibilité. Aucune session StartDynamics n'est nécessaire
+pour cette unique rotation.
+
+Les contenus 2025 de `ActiveDoc`, `IsOpenedViewOnly` et `GraphicsRedraw2` ont été consultés.
+Les pages 2025 de rotation/vue ont renvoyé un cadre de navigation sans contenu exploitable;
+leurs signatures ont été vérifiées dans les éditions officielles antérieures ci-dessous.
+L'appel réel de ces méthodes en 33.5.0 reste donc explicitement à confirmer sur le poste.
+
 ## Limite du curseur — critère principal non satisfait
 
 Raw Input distingue les sources; **la trackball continue à déplacer le curseur Windows**.
@@ -161,10 +209,12 @@ la validation devra constater cette limite plutôt que prétendre avoir réussi.
 
 ```text
 Check-Environment.ps1          hôte, politiques, Add-Type, Forms, Raw Input, COM
+Test-SolidWorksView.ps1        test de rotation uniquement après clic sur Armer
 Start-TrackballCAD.ps1         configuration, chargement, boucle UI, sauvegarde
 src/RawInputBridge.cs          P/Invoke, fenêtre message-only, capture et accumulateurs
 src/DiagnosticsWindow.cs       petite fenêtre diagnostic, handlers entièrement C#
 src/SolidWorksProbe.cs         acquisition COM et lecture de révision, rapport par étape
+src/SolidWorksViewTest.cs       test COM de vue et petite fenêtre d'armement
 modules/Portable.Runtime.psm1  prérequis et compilation à la demande
 modules/Portable.Configuration.psm1  JSON local
 modules/SolidWorks.Probe.psm1   connexion COM existante, lecture de révision uniquement
@@ -180,10 +230,9 @@ PowerShell ni appel COM ne se produit dans le traitement Raw Input. Le timer UI 
 instantanés; il ne crée pas une ligne ni un callback PowerShell par paquet.
 Une inscription Raw Input préexistante dans le processus est refusée plutôt que remplacée.
 
-Les prochaines étapes restent **non implémentées** :
+État des prochaines étapes :
 
-3. Vérifier les méthodes et signatures dans l'aide officielle correspondant à la révision
-   détectée, puis proposer un test explicite de petite rotation avec un document compatible.
+3. Test explicite de petite rotation fourni; **validation Windows/SolidWorks en attente**.
 4. Relier la boule à la rotation via modificateur clavier, accumulation et appels COM sérialisés
    sur STA à 30 Hz initialement, puis mesurer jusqu'à 60 Hz.
 5. Ajouter déplacement via modificateur configurable, zoom par molette observée ou clavier +
@@ -242,5 +291,10 @@ du rebranchement, révision COM et mouvement du curseur. Si seul COM échoue, la
 - [WM_INPUT et DefWindowProc](https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-input)
 - [RevisionNumber, ISldWorks](https://help.solidworks.com/2022/english/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.ISldWorks~RevisionNumber.html)
 - [Type.InvokeMember et objets COM](https://learn.microsoft.com/en-us/dotnet/api/system.type.invokemember?view=netframework-4.8)
+- [ActiveDoc, aide 2025](https://help.solidworks.com/2025/english/api/sldworksapi/SOLIDWORKS.Interop.sldworks~SOLIDWORKS.Interop.sldworks.ISldWorks~ActiveDoc.html)
+- [IsOpenedViewOnly, aide 2025](https://help.solidworks.com/2025/english/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.IModelDoc2~IsOpenedViewOnly.html)
+- [GraphicsRedraw2, aide 2025](https://help.solidworks.com/2025/english/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.IModelDoc2~GraphicsRedraw2.html)
+- [ActiveView, aide 2023](https://help.solidworks.com/2023/English/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.IModelDoc2~ActiveView.html)
+- [RotateAboutCenter, aide 2021](https://help.solidworks.com/2021/english/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.IModelView~RotateAboutCenter.html?format=P&value=)
 
 Licence MIT. SolidWorks et ses composants ne sont pas distribués dans ce dossier.
